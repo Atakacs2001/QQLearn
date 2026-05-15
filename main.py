@@ -3,12 +3,19 @@ import tkinter as tk
 from tkinter import messagebox
 from PIL import Image, ImageTk
 import numpy as np
-from scipy.linalg import sqrtm
 import math
 import cmath
 import os
 import sys
 from PIL.Image import Resampling
+
+from quantum_core import (
+    to_density_matrix,
+    is_valid_density_matrix,
+    is_pure_state,
+    is_entangled_pure_state,
+    is_entangled_mixed_state,
+)
 
 # --- Helper function to handle file paths---
 def resource_path(relative_path):
@@ -19,72 +26,6 @@ def resource_path(relative_path):
         # Fallback to the current directory during development
         base_path = os.path.abspath(".")
     return os.path.join(base_path, relative_path)
-
-# --- Quantum computation helper functions ---
-
-def to_density_matrix(state):
-    """Convert a state vector or a 4x4 matrix to a proper density matrix."""
-    state = np.asarray(state)
-    if state.ndim == 1:
-        if len(state) != 4:
-            raise ValueError("The state vector must have 4 elements (2 qubits).")
-        state = state / np.linalg.norm(state)
-        rho = np.outer(state, state.conj())
-    elif state.ndim == 2:
-        if state.shape != (4, 4):
-            raise ValueError("Density matrix must be 4x4.")
-        rho = state
-    else:
-        raise ValueError("Input must be a 1D vector or a 2D matrix.")
-    return rho
-
-def is_valid_density_matrix(rho, tol=1e-8):
-    """Check if a matrix is a valid density matrix."""
-    if not np.allclose(rho, rho.conj().T, atol=tol):
-        return False  # Must be Hermitian
-    if not np.all(np.linalg.eigvalsh(rho) >= -tol):
-        return False  # Must be positive semi-definite
-    if not np.isclose(np.trace(rho), 1.0, atol=tol):
-        return False  # Trace must be 1
-    return True
-
-def is_pure_state(rho, tol=1e-8):
-    """Determine if the state is pure (i.e., Tr(ρ²) == 1)."""
-    purity = np.real(np.trace(rho @ rho))
-    return np.isclose(purity, 1.0, atol=tol), purity
-
-def partial_trace(rho, traced_out='second'):
-    """Trace out one of the two qubits."""
-    rho = np.asarray(rho).reshape(2, 2, 2, 2)
-    if traced_out == 'first':
-        return np.einsum('ijik->jk', rho)
-    elif traced_out == 'second':
-        return np.einsum('ikjk->ij', rho)
-    else:
-        raise ValueError("Invalid argument: traced_out must be 'first' or 'second'")
-
-def is_entangled_pure_state(rho, tol=1e-8):
-    """Check entanglement for pure states via the purity of reduced state."""
-    reduced = partial_trace(rho, traced_out='second')
-    reduced_purity = np.real(np.trace(reduced @ reduced))
-    return not np.isclose(reduced_purity, 1.0, atol=tol)
-
-def partial_transpose(rho, subsystem='second'):
-    """Compute the partial transpose of a density matrix."""
-    rho = rho.reshape(2, 2, 2, 2)
-    if subsystem == 'first':
-        pt = rho.transpose(2, 1, 0, 3)
-    elif subsystem == 'second':
-        pt = rho.transpose(0, 3, 2, 1)
-    else:
-        raise ValueError("Invalid subsystem: choose 'first' or 'second'")
-    return pt.reshape(4, 4)
-
-def is_entangled_mixed_state(rho, tol=1e-8):
-    """Use Peres–Horodecki criterion (PPT test) to detect entanglement in mixed states."""
-    pt = partial_transpose(rho, subsystem='second')
-    eigenvalues = np.linalg.eigvalsh(pt)
-    return np.any(eigenvalues < -tol)
 
 def parse_expression(expr):
     """Evaluate a mathematical expression safely, allowing complex numbers."""
